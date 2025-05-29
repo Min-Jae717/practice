@@ -685,7 +685,7 @@ def main():
                     col2.write(f"{bid.get('ntceinsttm', '기관명 없음')} | {bid.get('bsnsdivnm', '분류 없음')}")
                     col3.write(convert_to_won_format(bid.get('asignbdgtamt', 0)))
                     
-                    if st.button("상세보기", key=f"detail_{i}"):
+                    if st.button("상세보기", key=f"tab1_detail_{i}"):
                         st.session_state.selected_bid = bid
                         st.session_state.show_detail = True
                         st.rerun()
@@ -700,7 +700,7 @@ def main():
         # 검색 UI
         keyword = st.text_input("검색어를 입력하세요", placeholder="예: AI, 소프트웨어, 서버 등")
         
-        if st.button("검색", type="primary", key="keyword_search"):
+        if st.button("검색", type="primary", key="tab2_keyword_search"):
             if keyword:
                 with st.spinner("검색 중..."):
                     results = bid_manager.search_bids(keyword)
@@ -735,7 +735,7 @@ def main():
             with col1:
                 top_k = st.selectbox("결과 수", [5, 10, 15, 20], index=1)
             
-            if st.button("🎯 AI 검색", type="primary", key="semantic_search"):
+            if st.button("🎯 AI 검색", type="primary", key="tab3_semantic_search"):
                 if semantic_query:
                     with st.spinner("AI가 의미를 분석하여 관련 공고를 찾고 있습니다..."):
                         # 먼저 키워드 검색으로 후보 확보
@@ -786,7 +786,7 @@ def main():
         with col1:
             show_workflow = st.checkbox("워크플로우 과정 표시", value=True)
         
-        if st.button("⚡ LangGraph 검색", type="primary", key="langgraph_search"):
+        if st.button("⚡ LangGraph 검색", type="primary", key="tab4_langgraph_search"):
             if langgraph_query:
                 with st.spinner("AI 워크플로우가 다중 검색을 수행하고 있습니다..."):
                     final_state, messages = run_langgraph_workflow(langgraph_query, workflow)
@@ -868,11 +868,11 @@ def main():
         
         cols = st.columns(2)
         for idx, question in enumerate(example_questions):
-            if cols[idx % 2].button(question, key=f"example_{idx}"):
+            if cols[idx % 2].button(question, key=f"tab5_example_{idx}"):
                 st.session_state.pending_question = question
                 st.rerun()
         
-        if st.button("🔄 대화 초기화"):
+        if st.button("🔄 대화 초기화", key="tab5_chat_reset"):
             st.session_state.chat_messages = []
             st.rerun()
         
@@ -918,7 +918,7 @@ def main():
             st.write(f"**마감일:** {raw_data.get('bidClseDate', 'N/A')}")
             st.write(f"**상태:** {raw_data.get('bidNtceSttusNm', 'N/A')}")
         
-        if st.button("닫기"):
+        if st.button("닫기", key="detail_close_btn"):
             st.session_state.show_detail = False
             st.rerun()
 
