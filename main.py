@@ -3,17 +3,13 @@ import pandas as pd
 from streamlit_autorefresh import st_autorefresh
 from datetime import datetime, timedelta
 import time
+import json
 
 # 커스텀 모듈 import
 from database import BidDataManager, convert_to_won_format, format_won, format_joint_contract
 from ai_search import init_chatbot, init_semantic_search
-from langgraph_workflow import create_bid_search_workflow, create_hybrid_search_workflow
-from ui_tabs import (
-    show_live_bids_tab,
-    show_semantic_search_tab, 
-    add_langgraph_search_tab,
-    add_chatbot_to_streamlit
-)
+from langgraph_workflow import create_bid_search_workflow, create_hybrid_search_workflow, HybridSearchState
+from langchain_core.messages import HumanMessage
 from config import check_secrets
 
 # Streamlit 페이지 설정
@@ -126,6 +122,234 @@ def process_question(question: str, chatbot_instance):
     with st.chat_message("assistant"):
         st.markdown(response)
     st.session_state.chat_messages.append({"role": "assistant", "content": response})
+
+# ========== UI 탭 함수들 ==========
+
+def show_live_bids_tab(bid_manager: BidDataManager):
+    """실시간 입찰 공고 탭 UI 구성"""
+    st.markdown("""
+    <style>
+        .main-header-2 {
+            text-align: center;
+            padding: 3.5rem 0;
+            background: linear-gradient(135deg, #ff9a8b 0%, #ff6a88 100%);
+            color: white;
+            border-radius: 20px;
+            margin-bottom: 3rem;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.25);
+            overflow: hidden;
+            position: relative;
+            animation: fadeIn 1.5s ease-out;
+        }
+        .main-header-2 h1 {
+            font-size: 3.8rem;
+            font-weight: 900;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            position: relative;
+            z-index: 1;
+            margin-bottom: 0.8rem;
+        }
+        .main-header-2 p {
+            font-size: 1.5rem;
+            font-weight: 400;
+            opacity: 0.95;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0.8rem auto 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class="main-header-2">
+        <h1>🚀 당신의 입찰 성공 파트너, AI 입찰 도우미!</h1>
+        <p>
+            매일 업데이트되는 실시간 공고 확인부터<br>
+            인공지능 기반의 정확한 검색과 스마트한 질의응답까지,<br>
+            복잡한 입찰 과정을 쉽고 빠르게 경험하세요.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+         
+    st.subheader("📢 현재 진행 중인 입찰 목록")
+    
+    # 데이터 로드
+    try:
+        live_bids = bid_manager.get_live_bids(limit=100)  # 데이터 양을 줄임
+        if not live_bids:
+            st.warning("현재 진행 중인 입찰 공고가 없습니다.")
+            return
+        
+        # DataFrame 변환 (간소화)
+        display_data = []
+        for row in live_bids[:50]:  # 최대 50개만 표시
+            raw_data = row.get('raw', {})
+            display_row = {
+                "공고번호": raw_data.get('bidNtceNo', row.get('bidNtceNo', '')),
+                "공고명": raw_data.get('bidNtceNm', row.get('bidNtceNm', ''))[:50] + "...",  # 길이 제한
+                "공고기관": raw_data.get('ntceInsttNm', row.get('ntceInsttNm', ''))[:20] + "...",
+                "분류": raw_data.get('bsnsDivNm', row.get('bsnsDivNm', '')),
+                "금액": raw_data.get('asignBdgtAmt', row.get('asignBdgtAmt', 0)),
+                "게시일": raw_data.get('bidNtceDate', row.get('bidNtceDate', '')),
+                "마감일": raw_data.get('bidClseDate', row.get('bidClseDate', '')),
+                "raw_data": row
+            }
+            display_data.append(display_row)
+        
+        df_live = pd.DataFrame(display_data)
+        
+        # 간단한 필터
+        search_keyword = st.text_input("🔎 공고명 검색")
+        
+        if search_keyword:
+            df_live = df_live[df_live["공고명"].str.contains(search_keyword, case=False, na=False)]
+        
+        # 결과 표시
+        st.write(f"검색 결과: {len(df_live)}건")
+        
+        # 간단한 테이블 표시
+        for i, (idx, row) in enumerate(df_live.head(20).iterrows()):
+            with st.container():
+                col1, col2, col3 = st.columns([3, 2, 1])
+                col1.write(f"**{row['공고명']}**")
+                col2.write(f"{row['공고기관']} | {row['분류']}")
+                if col3.button("상세", key=f"detail_{i}"):
+                    st.session_state["page"] = "detail"
+                    st.session_state["selected_live_bid"] = row["raw_data"]
+                    st.rerun()
+                st.divider()
+        
+    except Exception as e:
+        st.error(f"데이터 로드 중 오류 발생: {e}")
+
+def show_semantic_search_tab(semantic_engine, bid_manager: BidDataManager):
+    """시맨틱 검색 탭 UI 구성 (간소화)"""
+    st.markdown("## 🔍 AI 시맨틱 검색")
+    
+    # 검색 UI
+    search_query = st.text_input("검색어를 입력하세요", 
+                                placeholder="예: AI 개발, 서버 구축 등")
+    
+    if st.button("🔍 검색", type="primary"):
+        if search_query:
+            with st.spinner("검색 중..."):
+                try:
+                    # 시맨틱 검색 수행
+                    search_results = semantic_engine.search(search_query, num_results=10, similarity_threshold=0.3)
+                    
+                    if search_results:
+                        st.success(f"검색 결과: {len(search_results)}건")
+                        
+                        # RAG 응답 생성
+                        rag_response = semantic_engine.generate_rag_response(search_query, search_results)
+                        st.info(f"**AI 분석:** {rag_response}")
+                        
+                        # 결과 표시
+                        for i, (metadata, score) in enumerate(search_results[:5]):
+                            with st.expander(f"공고 {i+1} (유사도: {score:.1%})"):
+                                st.write(f"**공고명:** {metadata.get('공고명', 'N/A')}")
+                                st.write(f"**기관명:** {metadata.get('기관명', 'N/A')}")
+                                st.write(f"**공고번호:** {metadata.get('공고번호', 'N/A')}")
+                    else:
+                        st.warning("검색 결과가 없습니다.")
+                except Exception as e:
+                    st.error(f"검색 중 오류 발생: {e}")
+
+def add_langgraph_search_tab(bid_manager: BidDataManager):
+    """LangGraph AI 검색 탭 UI (간소화)"""
+    st.markdown("## ✨ LangGraph 기반 고급 분석")
+    
+    # 간단한 검색 UI
+    search_query = st.text_input("고급 검색어를 입력하세요")
+    
+    if st.button("🚀 고급 검색", type="primary"):
+        if search_query:
+            with st.spinner("하이브리드 검색 실행 중..."):
+                try:
+                    # 하이브리드 검색 워크플로우 생성
+                    hybrid_workflow = create_hybrid_search_workflow()
+                    
+                    # 초기 상태 설정
+                    initial_state: HybridSearchState = {
+                        "query": search_query,
+                        "search_method": [],
+                        "supabase_results": [],
+                        "vector_results": [],
+                        "api_results": {},
+                        "combined_results": [],
+                        "final_results": [],
+                        "summary": "",
+                        "messages": [],
+                        "error": None,
+                        "total_count": 0,
+                        "need_api_search": False
+                    }
+                    
+                    # 워크플로우 실행
+                    final_state = hybrid_workflow.invoke(initial_state)
+                    
+                    if final_state["final_results"]:
+                        st.success(final_state["summary"])
+                        
+                        # 상위 5개 결과만 표시
+                        for i, item in enumerate(final_state["final_results"][:5], 1):
+                            with st.expander(f"공고 {i}: {item.get('bidNtceNm', '제목 없음')[:50]}..."):
+                                st.write(f"**기관:** {item.get('ntceInsttNm', 'N/A')}")
+                                st.write(f"**공고번호:** {item.get('bidNtceNo', 'N/A')}")
+                                st.write(f"**검색 소스:** {item.get('source', 'N/A')}")
+                                st.write(f"**관련도 점수:** {item.get('relevance_score', 0):.1f}")
+                    else:
+                        st.warning("검색 결과가 없습니다.")
+                        
+                except Exception as e:
+                    st.error(f"검색 중 오류 발생: {e}")
+
+def add_chatbot_to_streamlit(chatbot):
+    """AI 챗봇 도우미 탭 (간소화)"""
+    st.markdown("## 🤖 AI 채팅 도우미")
+    
+    # 예시 질문 버튼
+    example_questions = [
+        "AI 개발 관련 입찰 공고 찾아줘",
+        "서버 구축 입찰 현황은?",
+        "소프트웨어 개발 입찰 공고 있나?"
+    ]
+    
+    cols = st.columns(3)
+    for idx, question in enumerate(example_questions):
+        if cols[idx].button(question, key=f"example_{idx}"):
+            st.session_state.pending_question = question
+            st.rerun()
+    
+    if st.button("🔄 대화 초기화"):
+        st.session_state.chat_messages = []
+        st.rerun()
+    
+    # 세션 상태 초기화
+    if "chat_messages" not in st.session_state:
+        st.session_state.chat_messages = []
+    
+    # 이전 대화 표시
+    for message in st.session_state.chat_messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+    
+    # 예시 질문 처리
+    if hasattr(st.session_state, 'pending_question'):
+        question = st.session_state.pending_question
+        del st.session_state.pending_question
+        process_question(question, chatbot)
+        st.rerun()
+    
+    # 사용자 입력
+    if prompt := st.chat_input("질문을 입력하세요"):
+        process_question(prompt, chatbot)
 
 # 메인 페이지 라우팅
 page = st.session_state.get("page", "home")
