@@ -1,5 +1,3 @@
-# packages.txt
-# 시스템 패키지 종속성 (필요한 경우)
 build-essential
 python3-dev
 libpq-dev
