@@ -14,6 +14,7 @@ from ui_tabs import (
     add_langgraph_search_tab,
     add_chatbot_to_streamlit
 )
+from config import check_secrets
 
 # Streamlit 페이지 설정
 st.set_page_config(
@@ -82,6 +83,9 @@ st.markdown("""
 @st.cache_resource
 def initialize_managers():
     """매니저 클래스들 초기화"""
+    # Secrets 확인
+    check_secrets()
+    
     bid_manager = BidDataManager()
     chatbot = init_chatbot()
     semantic_engine = init_semantic_search()
