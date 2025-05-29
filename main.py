@@ -1696,13 +1696,14 @@ if 'chat_messages' not in st.session_state:
     st.session_state.chat_messages = []
 
 if __name__ == "__main__":
-    main()import streamlit as st
-import pandas as pd
-from datetime import datetime, timedelta
-import json
-import numpy as np
-from typing import TypedDict, Annotated, List, Dict, Optional
-import operator
+    main()
+    import streamlit as st
+    import pandas as pd
+    from datetime import datetime, timedelta
+    import json
+    import numpy as np
+    from typing import TypedDict, Annotated, List, Dict, Optional
+    import operator
 
 # 설정 파일 import
 from config import get_app_config, check_secrets
