@@ -1,4 +1,3 @@
-import os
 import psycopg2
 from psycopg2.extras import RealDictCursor, Json
 import streamlit as st
@@ -6,24 +5,24 @@ from typing import List, Dict, Optional, Any
 import pandas as pd
 from datetime import datetime, timedelta
 import json
-
-# Supabase 연결 설정
-SUPABASE_URL = "your-supabase-url"  # 실제 Supabase URL로 변경
-SUPABASE_KEY = "your-supabase-anon-key"  # 실제 Supabase anon key로 변경
-DATABASE_URL = "postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres"  # 실제 연결 문자열로 변경
+from config import get_app_config, check_secrets
 
 class SupabaseDB:
     """Supabase PostgreSQL 연결 클래스"""
     
     def __init__(self):
         self.connection = None
+        self.config = get_app_config()
         self.connect()
     
     def connect(self):
         """Supabase PostgreSQL 데이터베이스에 연결"""
         try:
+            # secrets에서 설정 확인
+            check_secrets()
+            
             self.connection = psycopg2.connect(
-                DATABASE_URL,
+                self.config.database.url,
                 cursor_factory=RealDictCursor
             )
             self.connection.autocommit = True
