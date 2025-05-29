@@ -16,19 +16,7 @@ from langchain_core.output_parsers import StrOutputParser
 
 from database import BidDataManager, VectorSearchManager, convert_to_won_format
 from ai_search import SemanticSearchEngine
-
-# OpenAI API 키
-OPENAI_API_KEY = "your-openai-api-key"  # 실제 API 키로 변경
-
-# 나라장터 API 설정
-API_KEY = "your-narajangter-api-key"  # 실제 API 키로 변경
-BASE_URL_COMMON = "http://apis.data.go.kr/1230000/ad/BidPublicInfoService"
-API_ENDPOINTS = {
-    "공사": f"{BASE_URL_COMMON}/getBidPblancListInfoCnstwk",
-    "용역": f"{BASE_URL_COMMON}/getBidPblancListInfoServc", 
-    "물품": f"{BASE_URL_COMMON}/getBidPblancListInfoThng",
-    "외자": f"{BASE_URL_COMMON}/getBidPblancListInfoFrgcpt",
-}
+from config import get_app_config
 
 # ========== LangGraph 상태 정의 ==========
 class BidSearchState(TypedDict):
@@ -127,7 +115,7 @@ def search_supabase_node(state: BidSearchState) -> BidSearchState:
 def search_vector_db_node(state: BidSearchState) -> BidSearchState:
     """벡터 DB 시맨틱 검색 노드"""
     try:
-        semantic_engine = SemanticSearchEngine(OPENAI_API_KEY)
+        semantic_engine = SemanticSearchEngine()
         
         # 시맨틱 검색 수행
         results = semantic_engine.search(
@@ -250,11 +238,12 @@ def generate_answer_node(state: BidSearchState) -> BidSearchState:
             state["final_answer"] = f"'{state['query']}'에 대한 입찰 공고를 찾을 수 없습니다."
             return state
         
-        # LangChain LLM 초기화
+        # 설정에서 LLM 초기화
+        config = get_app_config()
         llm = ChatOpenAI(
-            model="gpt-4o-mini",
+            model=config.openai.model,
             temperature=0.3,
-            api_key=OPENAI_API_KEY
+            api_key=config.openai.api_key
         )
         
         # 컨텍스트 구성
@@ -346,7 +335,7 @@ def search_vector_hybrid_node(state: HybridSearchState) -> HybridSearchState:
     )
     
     try:
-        semantic_engine = SemanticSearchEngine(OPENAI_API_KEY)
+        semantic_engine = SemanticSearchEngine()
         results = semantic_engine.search(query, num_results=30, similarity_threshold=0.03)
         
         vector_results = []
@@ -403,6 +392,9 @@ def fetch_naratang_api_hybrid_node(state: HybridSearchState) -> HybridSearchStat
         state["api_results"] = {}
         return state
     
+    # 설정에서 API 키 가져오기
+    config = get_app_config()
+    
     query = state["query"]
     
     state["messages"].append(
@@ -411,6 +403,15 @@ def fetch_naratang_api_hybrid_node(state: HybridSearchState) -> HybridSearchStat
     
     end_date = datetime.now()
     start_date = end_date - timedelta(days=30)
+    
+    # API 엔드포인트 설정
+    BASE_URL_COMMON = config.api.base_url
+    API_ENDPOINTS = {
+        "공사": f"{BASE_URL_COMMON}/getBidPblancListInfoCnstwk",
+        "용역": f"{BASE_URL_COMMON}/getBidPblancListInfoServc", 
+        "물품": f"{BASE_URL_COMMON}/getBidPblancListInfoThng",
+        "외자": f"{BASE_URL_COMMON}/getBidPblancListInfoFrgcpt",
+    }
     
     all_results = {}
     api_total = 0
@@ -422,7 +423,7 @@ def fetch_naratang_api_hybrid_node(state: HybridSearchState) -> HybridSearchStat
             )
             
             params = {
-                'serviceKey': API_KEY,
+                'serviceKey': config.api.service_key,
                 'pageNo': 1,
                 'numOfRows': 20,
                 'inqryDiv': 1,
