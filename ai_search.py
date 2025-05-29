@@ -4,17 +4,16 @@ import numpy as np
 from typing import List, Dict, Tuple, Optional
 from sentence_transformers import SentenceTransformer
 from database import VectorSearchManager, BidDataManager
+from config import get_app_config
 import json
-
-# OpenAI API 키 설정
-OPENAI_API_KEY = "your-openai-api-key"  # 실제 API 키로 변경
 
 class BidSearchChatbot:
     """입찔 공고 검색 챗봇 클래스"""
     
-    def __init__(self, openai_api_key: str):
+    def __init__(self):
         """챗봇 초기화"""
-        self.openai_client = OpenAI(api_key=openai_api_key)
+        self.config = get_app_config()
+        self.openai_client = OpenAI(api_key=self.config.openai.api_key)
         self.vector_manager = VectorSearchManager()
         self.bid_manager = BidDataManager()
         
@@ -141,7 +140,7 @@ class BidSearchChatbot:
         
         try:
             response = self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=self.config.openai.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -157,8 +156,9 @@ class BidSearchChatbot:
 class SemanticSearchEngine:
     """시맨틱 검색 엔진"""
     
-    def __init__(self, openai_api_key: str):
-        self.openai_client = OpenAI(api_key=openai_api_key)
+    def __init__(self):
+        self.config = get_app_config()
+        self.openai_client = OpenAI(api_key=self.config.openai.api_key)
         self.vector_manager = VectorSearchManager()
         self.bid_manager = BidDataManager()
         
@@ -241,7 +241,7 @@ class SemanticSearchEngine:
         
         try:
             response = self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=self.config.openai.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -257,9 +257,9 @@ class SemanticSearchEngine:
 @st.cache_resource
 def init_chatbot():
     """챗봇 인스턴스를 초기화하고 캐싱"""
-    return BidSearchChatbot(openai_api_key=OPENAI_API_KEY)
+    return BidSearchChatbot()
 
 @st.cache_resource
 def init_semantic_search():
     """시맨틱 검색 엔진을 초기화하고 캐싱"""
-    return SemanticSearchEngine(openai_api_key=OPENAI_API_KEY)
+    return SemanticSearchEngine()
