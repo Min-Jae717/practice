@@ -72,14 +72,13 @@ class APIConfig:
 @dataclass
 class AppConfig:
     """애플리케이션 전체 설정"""
+    database: DatabaseConfig
+    openai: OpenAIConfig
+    api: APIConfig
     debug: bool = False
     page_size: int = 10
     max_search_results: int = 100
     vector_similarity_threshold: float = 0.3
-    
-    database: DatabaseConfig
-    openai: OpenAIConfig
-    api: APIConfig
     
     @classmethod
     def load(cls) -> 'AppConfig':
@@ -87,13 +86,13 @@ class AppConfig:
         try:
             app_secrets = st.secrets.get("app", {})
             return cls(
+                database=DatabaseConfig.from_secrets(),
+                openai=OpenAIConfig.from_secrets(),
+                api=APIConfig.from_secrets(),
                 debug=app_secrets.get("debug", False),
                 page_size=int(app_secrets.get("page_size", "10")),
                 max_search_results=int(app_secrets.get("max_search_results", "100")),
-                vector_similarity_threshold=float(app_secrets.get("vector_similarity_threshold", "0.3")),
-                database=DatabaseConfig.from_secrets(),
-                openai=OpenAIConfig.from_secrets(),
-                api=APIConfig.from_secrets()
+                vector_similarity_threshold=float(app_secrets.get("vector_similarity_threshold", "0.3"))
             )
         except Exception as e:
             st.error(f"애플리케이션 설정 로드 실패: {e}")
